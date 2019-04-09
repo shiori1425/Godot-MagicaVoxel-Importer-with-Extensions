@@ -22,10 +22,10 @@ func get_save_extension():
 func get_preset_count():
 	return 0
 
-func get_preset_name(preset):
+func get_preset_name(_preset):
 	return 'Default'
 	
-func get_import_options(preset):
+func get_import_options(_preset):
 	return [
 		{
 			'name': 'Scale',
@@ -33,10 +33,10 @@ func get_import_options(preset):
 		}
 	]
 
-func get_option_visibility(option, options):
+func get_option_visibility(_option, _options):
 	return true
 
-func import(source_path, destination_path, options, platforms, gen_files):
+func import(source_path, destination_path, options, _platforms, _gen_files):
 	print('Vox Importer: importing ', source_path)
 
 	var scale = 0.1
@@ -52,6 +52,7 @@ func import(source_path, destination_path, options, platforms, gen_files):
 		return err
 	
 	var identifier = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
+	#warning-ignore:unused_variable
 	var version = file.get_32()
 	var voxels = {}
 	var colors = null
@@ -63,6 +64,7 @@ func import(source_path, destination_path, options, platforms, gen_files):
 		while file.get_position() < file.get_len():
 			var chunkId = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
 			var chunkSize = file.get_32()
+			#warning-ignore:unused_variable
 			var childChunks = file.get_32()
 
 			match chunkId:
@@ -73,15 +75,17 @@ func import(source_path, destination_path, options, platforms, gen_files):
 					print('size: ', sizeX, ', ', sizeY, ', ', sizeZ)
 					file.get_buffer(chunkSize - 4 * 3)
 				'XYZI':
+					#warning-ignore:unused_variable
 					for i in range(file.get_32()):
 						var x = file.get_8()
-						var z = file.get_8()
+						var z = -file.get_8()
 						var y = file.get_8()
 						var c = file.get_8()
 						var voxel = Vector3(x, y, z)
 						voxels[voxel] = c - 1
 				'RGBA':
 					colors = []
+					#warning-ignore:unused_variable
 					for i in range(256):
 						var r = float(file.get_8() / 255.0)
 						var g = float(file.get_8() / 255.0)
@@ -94,7 +98,7 @@ func import(source_path, destination_path, options, platforms, gen_files):
 		if voxels.size() == 0: return voxels
 	file.close()
 
-	var diffVector = Vector3(sizeX / 2 - 0.5, -0.5, sizeY / 2 - 0.5)
+	var diffVector = Vector3(sizeX / 2 - 0.5, -0.5, -sizeY / 2 - 0.5)
 	print('diffVector: ', diffVector)
 
 	var st = SurfaceTool.new()
@@ -122,14 +126,7 @@ func import(source_path, destination_path, options, platforms, gen_files):
 	material.roughness = 1
 	st.set_material(material)
 
-	var mesh
-
-	if file.file_exists(destination_path) and false:
-		var old_mesh = ResourceLoader.load(destination_path)
-		old_mesh.surface_remove(0)
-		mesh = st.commit(old_mesh)
-	else:
-		mesh = st.commit()
+	var mesh = st.commit()
 	
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
