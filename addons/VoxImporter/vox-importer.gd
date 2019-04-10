@@ -3,6 +3,8 @@ extends EditorImportPlugin
 
 const VoxFile = preload("./VoxFile.gd");
 const Faces = preload("./Faces.gd");
+const VoxData = preload("./VoxFormat/VoxData.gd");
+const VoxNode = preload("./VoxFormat/VoxNode.gd");
 
 func _init():
 	print('Vox Importer: ready')
@@ -61,28 +63,25 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		while voxFile.has_data_to_read():
 			read_chunk(vox, voxFile);
 	file.close()
+	
+	var voxel_data = unify_voxels(vox).data;
 
 	var st = SurfaceTool.new()
-	
-	for model in vox.models:
-		var diffVector = model.size / 2 - Vector3(0.5, 0.5, 0.5)
-		print('diffVector: ', diffVector)
-	
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	
-		for voxel in model.voxels:
-			var voxelSides = []
-			if not model.voxels.has(voxel + Vector3.UP): voxelSides += Faces.Top
-			if not model.voxels.has(voxel + Vector3.DOWN): voxelSides += Faces.Bottom
-			if not model.voxels.has(voxel + Vector3.LEFT): voxelSides += Faces.Left
-			if not model.voxels.has(voxel + Vector3.RIGHT): voxelSides += Faces.Right
-			if not model.voxels.has(voxel + Vector3.BACK): voxelSides += Faces.Front
-			if not model.voxels.has(voxel + Vector3.FORWARD): voxelSides += Faces.Back
-			
-			st.add_color(vox.colors[model.voxels[voxel]])
-	
-			for t in voxelSides:
-				st.add_vertex(((t * 0.5) + voxel - diffVector) * scale)
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+
+	for voxel in voxel_data:
+		var voxelSides = []
+		if not voxel_data.has(voxel + Vector3.UP): voxelSides += Faces.Top
+		if not voxel_data.has(voxel + Vector3.DOWN): voxelSides += Faces.Bottom
+		if not voxel_data.has(voxel + Vector3.LEFT): voxelSides += Faces.Left
+		if not voxel_data.has(voxel + Vector3.RIGHT): voxelSides += Faces.Right
+		if not voxel_data.has(voxel + Vector3.BACK): voxelSides += Faces.Front
+		if not voxel_data.has(voxel + Vector3.FORWARD): voxelSides += Faces.Back
+		
+		st.add_color(vox.colors[voxel_data[voxel]])
+
+		for t in voxelSides:
+			st.add_vertex(((t * 0.5) + voxel) * scale)
 		
 	st.generate_normals()
 	
@@ -97,29 +96,6 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
 
-class VoxData:
-	var models: Array = [Model.new()];
-	var current_index = -1;
-	var colors = null;
-	var nodes = {};
-	
-	func get_model() -> Model: return models[current_index];
-
-class VoxNode:
-	var id: int;
-	var attributes = {};
-	var child_nodes = [];
-	var models = [];
-	var translation = Vector3(0, 0, 0);
-	var rotation = Basis();
-	
-	func _init(id, attributes):
-		self.id = id;
-		self.attributes = attributes;
-
-class Model:
-	var size: Vector3;
-	var voxels = {};
 
 func string_to_vector3(input: String) -> Vector3:
 	var data = input.split_floats(' ');
@@ -160,15 +136,15 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			vox.current_index += 1;
 			var model = vox.get_model();
 			var x = file.get_32();
-			var z = file.get_32();
 			var y = file.get_32();
+			var z = file.get_32();
 			model.size = Vector3(x, y, z);
 		'XYZI':
 			var model = vox.get_model();
 			for _i in range(file.get_32()):
 				var x = file.get_8()
-				var z = (model.size.z - file.get_8())-1
 				var y = file.get_8()
+				var z = file.get_8()
 				var c = file.get_8()
 				var voxel = Vector3(x, y, z)
 				model.voxels[voxel] = c - 1
@@ -220,3 +196,45 @@ func read_chunk(vox: VoxData, file: VoxFile):
 				file.get_vox_dict();
 	file.read_remaining();
 
+func unify_voxels(vox: VoxData):
+	var node = vox.nodes[0];
+	return get_voxels(node, vox);
+
+class VoxelData:
+	var data = {};
+	
+	func combine(model):
+		var offset = (model.size / 2.0).floor();
+		for voxel in model.voxels:
+			data[voxel - offset] = model.voxels[voxel];
+	
+	func combine_data(other):
+		for voxel in other.data:
+			data[voxel] = other.data[voxel];
+	
+	func rotate(basis: Basis):
+		var new_data = {};
+		for voxel in data:
+			var new_voxel = basis.xform(voxel);
+			new_data[new_voxel] = data[voxel];
+		data = new_data;
+	
+	func translate(translation: Vector3):
+		var new_data = {};
+		for voxel in data:
+			var new_voxel = voxel + translation;
+			new_data[new_voxel] = data[voxel];
+		data = new_data;
+
+func get_voxels(node: VoxNode, vox: VoxData):
+	var data = VoxelData.new();
+	for model_index in node.models:
+		var model = vox.models[model_index];
+		data.combine(model);
+	for child_index in node.child_nodes:
+		var child = vox.nodes[child_index];
+		var child_data = get_voxels(child, vox);
+		child_data.rotate(node.rotation);
+		child_data.translate(node.translation);
+		data.combine_data(child_data);
+	return data;
