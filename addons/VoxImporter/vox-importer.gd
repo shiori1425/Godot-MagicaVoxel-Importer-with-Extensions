@@ -6,6 +6,8 @@ const Faces = preload("./Faces.gd");
 const VoxData = preload("./VoxFormat/VoxData.gd");
 const VoxNode = preload("./VoxFormat/VoxNode.gd");
 
+const debug_file = false;
+
 func _init():
 	print('Vox Importer: ready')
 
@@ -81,7 +83,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		st.add_color(vox.colors[voxel_data[voxel]])
 
 		for t in voxelSides:
-			st.add_vertex(((t * 0.5) + voxel) * scale)
+			st.add_vertex((t + voxel) * scale)
 		
 	st.generate_normals()
 	
@@ -139,8 +141,10 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			var y = file.get_32();
 			var z = file.get_32();
 			model.size = Vector3(x, y, z);
+			if debug_file: print('SIZE ', model.size);
 		'XYZI':
 			var model = vox.get_model();
+			if debug_file: print('XYZI');
 			for _i in range(file.get_32()):
 				var x = file.get_8()
 				var y = file.get_8()
@@ -148,6 +152,7 @@ func read_chunk(vox: VoxData, file: VoxFile):
 				var c = file.get_8()
 				var voxel = Vector3(x, y, z)
 				model.voxels[voxel] = c - 1
+				if debug_file: print('\t', voxel, ' ', c-1);
 		'RGBA':
 			vox.colors = []
 			for _i in range(256):
@@ -167,14 +172,19 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			
 			file.get_buffer(8);
 			var num_of_frames = file.get_32();
+			
+			if debug_file: print('nTRN[', node_id, '] -> ', child);
 			for _frame in range(num_of_frames):
 				var frame_attributes = file.get_vox_dict();
 				if (frame_attributes.has('_t')):
 					var trans = frame_attributes['_t'];
 					node.translation = string_to_vector3(trans);
+					if debug_file: print('\tT: ', node.translation);
 				if (frame_attributes.has('_r')):
 					var rot = frame_attributes['_r'];
 					node.rotation = byte_to_basis(int(rot));
+					if debug_file: print('\tR: ', node.rotation);
+			
 		'nGRP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
@@ -184,6 +194,7 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			var num_children = file.get_32();
 			for _c in num_children:
 				node.child_nodes.append(file.get_32());
+			if debug_file: print('nGRP[', node_id, '] -> ', node.child_nodes);
 		'nSHP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
@@ -194,6 +205,7 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			for _i in range(num_models):
 				node.models.append(file.get_32());
 				file.get_vox_dict();
+			if debug_file: print('nSHP[', node_id,'] -> ', node.models);
 	file.read_remaining();
 
 func unify_voxels(vox: VoxData):
@@ -215,7 +227,8 @@ class VoxelData:
 	func rotate(basis: Basis):
 		var new_data = {};
 		for voxel in data:
-			var new_voxel = basis.xform(voxel);
+			var half_step = Vector3(0.5, 0.5, 0.5);
+			var new_voxel = (basis.xform(voxel+half_step)-half_step).floor();
 			new_data[new_voxel] = data[voxel];
 		data = new_data;
 	
@@ -234,7 +247,7 @@ func get_voxels(node: VoxNode, vox: VoxData):
 	for child_index in node.child_nodes:
 		var child = vox.nodes[child_index];
 		var child_data = get_voxels(child, vox);
-		child_data.rotate(node.rotation);
-		child_data.translate(node.translation);
 		data.combine_data(child_data);
+	data.rotate(node.rotation);
+	data.translate(node.translation);
 	return data;
