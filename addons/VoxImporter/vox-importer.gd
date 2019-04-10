@@ -131,7 +131,7 @@ func read_chunk(vox: VoxNode, file: File):
 			print('XYZI')
 			for _i in range(file.get_32()):
 				var x = file.get_8()
-				var z = model.size.z - file.get_8()
+				var z = (model.size.z - file.get_8())-1
 				var y = file.get_8()
 				var c = file.get_8()
 				var voxel = Vector3(x, y, z)
