@@ -71,6 +71,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
+	var vox_to_godot = Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP);
 	for voxel in voxel_data:
 		var voxelSides = []
 		if not voxel_data.has(voxel + Vector3.UP): voxelSides += Faces.Top
@@ -83,7 +84,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		st.add_color(vox.colors[voxel_data[voxel]])
 
 		for t in voxelSides:
-			st.add_vertex((t + voxel) * scale)
+			st.add_vertex(vox_to_godot.xform((t + voxel) * scale))
 		
 	st.generate_normals()
 	
