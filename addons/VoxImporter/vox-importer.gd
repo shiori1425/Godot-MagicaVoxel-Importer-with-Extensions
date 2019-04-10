@@ -37,12 +37,9 @@ func get_option_visibility(_option, _options):
 	return true
 
 func import(source_path, destination_path, options, _platforms, _gen_files):
-	print('Vox Importer: importing ', source_path)
-
 	var scale = 0.1
 	if options.Scale:
 		scale = float(options.Scale)
-	print('Vox Importer: scale: ', scale)
 	
 	var file = File.new()
 	var err = file.open(source_path, File.READ)
@@ -52,10 +49,10 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		return err
 	
 	var identifier = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
-	#warning-ignore:unused_variable
 	var version = file.get_32()
+	print('Importing ', source_path, ' @ scale ', scale, 'x, file version ', version);
 	
-	var vox = VoxNode.new();
+	var vox = VoxData.new();
 	if identifier == 'VOX ':
 		var voxFile = VoxFile.new(file);
 		while voxFile.has_data_to_read():
@@ -138,21 +135,57 @@ class VoxFile:
 			var value = get_vox_string();
 			result[key] = value;
 		return result;
+	
+	func get_vox_rotation():
+		var data = get_8();
+		var x_ind = ((data >> 0) & 0x03);
+		var y_ind = ((data >> 2) & 0x03);
+		var indexes = [0, 1, 2];
+		indexes.erase(x_ind);
+		indexes.erase(y_ind);
+		var z_ind = indexes[0];
+		var x_sign = 1 if ((data >> 4) & 0x01) == 0 else -1;
+		var y_sign = 1 if ((data >> 5) & 0x01) == 0 else -1;
+		var z_sign = 1 if ((data >> 6) & 0x01) == 0 else -1;
+		var result = Basis();
+		result.x[0] = x_sign if x_ind == 0 else 0;
+		result.x[1] = x_sign if x_ind == 1 else 0;
+		result.x[2] = x_sign if x_ind == 2 else 0;
+		
+		result.y[0] = y_sign if y_ind == 0 else 0;
+		result.y[1] = y_sign if y_ind == 1 else 0;
+		result.y[2] = y_sign if y_ind == 2 else 0;
+		
+		result.z[0] = z_sign if z_ind == 0 else 0;
+		result.z[1] = z_sign if z_ind == 1 else 0;
+		result.z[2] = z_sign if z_ind == 2 else 0;
+		return result;
 
-class VoxNode:
+class VoxData:
 	var models: Array = [Model.new()];
 	var current_index = -1;
 	var colors = null;
+	var nodes = {};
 	
 	func get_model() -> Model: return models[current_index];
 
+class VoxNode:
+	var id: int;
+	var attributes = {};
+	var child_nodes = [];
+	var models = [];
+	var translation = Vector3(0, 0, 0);
+	var rotation = Basis();
+	
+	func _init(id, attributes):
+		self.id = id;
+		self.attributes = attributes;
+
 class Model:
-	#warning-ignore:unused_class_variable
 	var size: Vector3;
-	#warning-ignore:unused_class_variable
 	var voxels = {};
 
-func read_chunk(vox: VoxNode, file: VoxFile):
+func read_chunk(vox: VoxData, file: VoxFile):
 	var chunk_id = file.get_string(4);
 	var chunk_size = file.get_32();
 	var childChunks = file.get_32()
@@ -166,10 +199,8 @@ func read_chunk(vox: VoxNode, file: VoxFile):
 			var z = file.get_32();
 			var y = file.get_32();
 			model.size = Vector3(x, y, z);
-			print('SIZE ', model.size)
 		'XYZI':
 			var model = vox.get_model();
-			print('XYZI')
 			for _i in range(file.get_32()):
 				var x = file.get_8()
 				var z = (model.size.z - file.get_8())-1
@@ -178,7 +209,6 @@ func read_chunk(vox: VoxNode, file: VoxFile):
 				var voxel = Vector3(x, y, z)
 				model.voxels[voxel] = c - 1
 		'RGBA':
-			print('RGBA');
 			vox.colors = []
 			for _i in range(256):
 				var r = float(file.get_8() / 255.0)
@@ -187,14 +217,21 @@ func read_chunk(vox: VoxNode, file: VoxFile):
 				var a = float(file.get_8() / 255.0)
 				vox.colors.append(Color(r, g, b, a))
 		'nTRN':
-			var nodeId = file.get_32();
+			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
+			var node = VoxNode.new(node_id, attributes);
+			vox.nodes[node_id] = node;
+			
 			var child = file.get_32();
+			node.child_nodes.append(child);
+			
 			file.get_buffer(8);
 			var num_of_frames = file.get_32();
-			print('nTRN[',nodeId,'] -> ', child, ': ', attributes);
+			print('nTRN[',node_id,'] -> ', child, ': ', attributes);
 			for _frame in range(num_of_frames):
 				var frame_attributes = file.get_vox_dict();
+				if (frame_attributes.has('_t')):
+					print('T');
 				print('\t', frame_attributes);
 		'nGRP':
 			var node_id = file.get_32();
@@ -213,14 +250,6 @@ func read_chunk(vox: VoxNode, file: VoxFile):
 				models.append(file.get_32());
 				file.get_vox_dict();
 			print('nSHP[', node_id, '] -> ', models, ': ', attributes);
-		'MAIN':
-			print('MAIN')
-		'LAYR':
-			print('LAYR')
-		'MATL':
-			print('MATL')
-		_:
-			print(chunk_id, ' - UNHANDLED, ChunkSize: ', chunk_size, ', ChildChunks: ', childChunks);
 	file.read_remaining();
 
 var top = [
