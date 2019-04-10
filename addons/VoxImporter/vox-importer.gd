@@ -1,6 +1,9 @@
 tool
 extends EditorImportPlugin
 
+const VoxFile = preload("./VoxFile.gd");
+const Faces = preload("./Faces.gd");
+
 func _init():
 	print('Vox Importer: ready')
 
@@ -69,12 +72,12 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	
 		for voxel in model.voxels:
 			var voxelSides = []
-			if not model.voxels.has(Vector3(voxel.x, voxel.y + 1, voxel.z)): voxelSides += top
-			if not model.voxels.has(Vector3(voxel.x, voxel.y - 1, voxel.z)): voxelSides += bottom
-			if not model.voxels.has(Vector3(voxel.x - 1, voxel.y, voxel.z)): voxelSides += left
-			if not model.voxels.has(Vector3(voxel.x + 1, voxel.y, voxel.z)): voxelSides += right
-			if not model.voxels.has(Vector3(voxel.x, voxel.y, voxel.z + 1)): voxelSides += front
-			if not model.voxels.has(Vector3(voxel.x, voxel.y, voxel.z - 1)): voxelSides += back
+			if not model.voxels.has(voxel + Vector3.UP): voxelSides += Faces.Top
+			if not model.voxels.has(voxel + Vector3.DOWN): voxelSides += Faces.Bottom
+			if not model.voxels.has(voxel + Vector3.LEFT): voxelSides += Faces.Left
+			if not model.voxels.has(voxel + Vector3.RIGHT): voxelSides += Faces.Right
+			if not model.voxels.has(voxel + Vector3.BACK): voxelSides += Faces.Front
+			if not model.voxels.has(voxel + Vector3.FORWARD): voxelSides += Faces.Back
 			
 			st.add_color(vox.colors[model.voxels[voxel]])
 	
@@ -93,73 +96,6 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
-
-class VoxFile:
-	var file: File;
-	var chunk_size = 0;
-	func _init(file: File):
-		self.file = file;
-		self.chunk_size = 0;
-	
-	func has_data_to_read(): return file.get_position() < file.get_len()
-	
-	func set_chunk_size(size):
-		chunk_size = size;
-	
-	func get_8():
-		chunk_size -= 1;
-		return file.get_8();
-	func get_32(): 
-		chunk_size -= 4;
-		return file.get_32();
-	func get_buffer(length):
-		chunk_size -= length;
-		return file.get_buffer(length);
-	
-	func read_remaining():
-		get_buffer(chunk_size);
-		chunk_size = 0;
-	
-	func get_string(length):
-		return get_buffer(length).get_string_from_ascii()
-	
-	func get_vox_string():
-		var length = get_32();
-		return get_string(length);
-	
-	func get_vox_dict():
-		var result = {};
-		var pairs = get_32();
-		for _p in range(pairs):
-			var key = get_vox_string();
-			var value = get_vox_string();
-			result[key] = value;
-		return result;
-	
-	func get_vox_rotation():
-		var data = get_8();
-		var x_ind = ((data >> 0) & 0x03);
-		var y_ind = ((data >> 2) & 0x03);
-		var indexes = [0, 1, 2];
-		indexes.erase(x_ind);
-		indexes.erase(y_ind);
-		var z_ind = indexes[0];
-		var x_sign = 1 if ((data >> 4) & 0x01) == 0 else -1;
-		var y_sign = 1 if ((data >> 5) & 0x01) == 0 else -1;
-		var z_sign = 1 if ((data >> 6) & 0x01) == 0 else -1;
-		var result = Basis();
-		result.x[0] = x_sign if x_ind == 0 else 0;
-		result.x[1] = x_sign if x_ind == 1 else 0;
-		result.x[2] = x_sign if x_ind == 2 else 0;
-		
-		result.y[0] = y_sign if y_ind == 0 else 0;
-		result.y[1] = y_sign if y_ind == 1 else 0;
-		result.y[2] = y_sign if y_ind == 2 else 0;
-		
-		result.z[0] = z_sign if z_ind == 0 else 0;
-		result.z[1] = z_sign if z_ind == 1 else 0;
-		result.z[2] = z_sign if z_ind == 2 else 0;
-		return result;
 
 class VoxData:
 	var models: Array = [Model.new()];
@@ -184,6 +120,34 @@ class VoxNode:
 class Model:
 	var size: Vector3;
 	var voxels = {};
+
+func string_to_vector3(input: String) -> Vector3:
+	var data = input.split_floats(' ');
+	return Vector3(data[0], data[1], data[2]);
+
+func byte_to_basis(data: int):
+	var x_ind = ((data >> 0) & 0x03);
+	var y_ind = ((data >> 2) & 0x03);
+	var indexes = [0, 1, 2];
+	indexes.erase(x_ind);
+	indexes.erase(y_ind);
+	var z_ind = indexes[0];
+	var x_sign = 1 if ((data >> 4) & 0x01) == 0 else -1;
+	var y_sign = 1 if ((data >> 5) & 0x01) == 0 else -1;
+	var z_sign = 1 if ((data >> 6) & 0x01) == 0 else -1;
+	var result = Basis();
+	result.x[0] = x_sign if x_ind == 0 else 0;
+	result.x[1] = x_sign if x_ind == 1 else 0;
+	result.x[2] = x_sign if x_ind == 2 else 0;
+	
+	result.y[0] = y_sign if y_ind == 0 else 0;
+	result.y[1] = y_sign if y_ind == 1 else 0;
+	result.y[2] = y_sign if y_ind == 2 else 0;
+	
+	result.z[0] = z_sign if z_ind == 0 else 0;
+	result.z[1] = z_sign if z_ind == 1 else 0;
+	result.z[2] = z_sign if z_ind == 2 else 0;
+	return result;
 
 func read_chunk(vox: VoxData, file: VoxFile):
 	var chunk_id = file.get_string(4);
@@ -227,87 +191,32 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			
 			file.get_buffer(8);
 			var num_of_frames = file.get_32();
-			print('nTRN[',node_id,'] -> ', child, ': ', attributes);
 			for _frame in range(num_of_frames):
 				var frame_attributes = file.get_vox_dict();
 				if (frame_attributes.has('_t')):
-					print('T');
-				print('\t', frame_attributes);
+					var trans = frame_attributes['_t'];
+					node.translation = string_to_vector3(trans);
+				if (frame_attributes.has('_r')):
+					var rot = frame_attributes['_r'];
+					node.rotation = byte_to_basis(int(rot));
 		'nGRP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
+			var node = VoxNode.new(node_id, attributes);
+			vox.nodes[node_id] = node;
+			
 			var num_children = file.get_32();
-			var children = [];
 			for _c in num_children:
-				children.append(file.get_32());
-			print('nGRP[', node_id, '] -> ', children, ': ', attributes);
+				node.child_nodes.append(file.get_32());
 		'nSHP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
+			var node = VoxNode.new(node_id, attributes);
+			vox.nodes[node_id] = node;
+			
 			var num_models = file.get_32();
-			var models = [];
 			for _i in range(num_models):
-				models.append(file.get_32());
+				node.models.append(file.get_32());
 				file.get_vox_dict();
-			print('nSHP[', node_id, '] -> ', models, ': ', attributes);
 	file.read_remaining();
 
-var top = [
-	Vector3( 1.0000, 1.0000, 1.0000),
-	Vector3(-1.0000, 1.0000, 1.0000),
-	Vector3(-1.0000, 1.0000,-1.0000),
-	
-	Vector3(-1.0000, 1.0000,-1.0000),
-	Vector3( 1.0000, 1.0000,-1.0000),
-	Vector3( 1.0000, 1.0000, 1.0000),
-]
-
-var bottom = [
-	Vector3(-1.0000,-1.0000,-1.0000),
-	Vector3(-1.0000,-1.0000, 1.0000),
-	Vector3( 1.0000,-1.0000, 1.0000),
-	
-	Vector3( 1.0000, -1.0000, 1.0000),
-	Vector3( 1.0000, -1.0000,-1.0000),
-	Vector3(-1.0000, -1.0000,-1.0000),
-]
-
-var front = [
-	Vector3(-1.0000, 1.0000, 1.0000),
-	Vector3( 1.0000, 1.0000, 1.0000),
-	Vector3( 1.0000,-1.0000, 1.0000),
-	
-	Vector3( 1.0000,-1.0000, 1.0000),
-	Vector3(-1.0000,-1.0000, 1.0000),
-	Vector3(-1.0000, 1.0000, 1.0000),
-]
-
-var back = [
-	Vector3( 1.0000,-1.0000,-1.0000),
-	Vector3( 1.0000, 1.0000,-1.0000),
-	Vector3(-1.0000, 1.0000,-1.0000),
-	
-	Vector3(-1.0000, 1.0000,-1.0000),
-	Vector3(-1.0000,-1.0000,-1.0000),
-	Vector3( 1.0000,-1.0000,-1.0000)
-]
-
-var left = [
-	Vector3(-1.0000, 1.0000, 1.0000),
-	Vector3(-1.0000,-1.0000, 1.0000),
-	Vector3(-1.0000,-1.0000,-1.0000),
-	
-	Vector3(-1.0000,-1.0000,-1.0000),
-	Vector3(-1.0000, 1.0000,-1.0000),
-	Vector3(-1.0000, 1.0000, 1.0000),
-]
-
-var right = [
-	Vector3( 1.0000, 1.0000, 1.0000),
-	Vector3( 1.0000, 1.0000,-1.0000),
-	Vector3( 1.0000,-1.0000,-1.0000),
-	
-	Vector3( 1.0000,-1.0000,-1.0000),
-	Vector3( 1.0000,-1.0000, 1.0000),
-	Vector3( 1.0000, 1.0000, 1.0000),
-]
