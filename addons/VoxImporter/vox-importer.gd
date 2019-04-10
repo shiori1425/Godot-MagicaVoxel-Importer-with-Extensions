@@ -57,8 +57,9 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	
 	var vox = VoxNode.new();
 	if identifier == 'VOX ':
-		while file.get_position() < file.get_len():
-			read_chunk(vox, file);
+		var voxFile = VoxFile.new(file);
+		while voxFile.has_data_to_read():
+			read_chunk(vox, voxFile);
 	file.close()
 
 	var st = SurfaceTool.new()
@@ -96,6 +97,48 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
 
+class VoxFile:
+	var file: File;
+	var chunk_size = 0;
+	func _init(file: File):
+		self.file = file;
+		self.chunk_size = 0;
+	
+	func has_data_to_read(): return file.get_position() < file.get_len()
+	
+	func set_chunk_size(size):
+		chunk_size = size;
+	
+	func get_8():
+		chunk_size -= 1;
+		return file.get_8();
+	func get_32(): 
+		chunk_size -= 4;
+		return file.get_32();
+	func get_buffer(length):
+		chunk_size -= length;
+		return file.get_buffer(length);
+	
+	func read_remaining():
+		get_buffer(chunk_size);
+		chunk_size = 0;
+	
+	func get_string(length):
+		return get_buffer(length).get_string_from_ascii()
+	
+	func get_vox_string():
+		var length = get_32();
+		return get_string(length);
+	
+	func get_vox_dict():
+		var result = {};
+		var pairs = get_32();
+		for _p in range(pairs):
+			var key = get_vox_string();
+			var value = get_vox_string();
+			result[key] = value;
+		return result;
+
 class VoxNode:
 	var models: Array = [Model.new()];
 	var current_index = -1;
@@ -109,13 +152,13 @@ class Model:
 	#warning-ignore:unused_class_variable
 	var voxels = {};
 
-func read_chunk(vox: VoxNode, file: File):
-	var chunkId = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii();
-	var chunkSize = file.get_32();
-	#warning-ignore:unused_variable
+func read_chunk(vox: VoxNode, file: VoxFile):
+	var chunk_id = file.get_string(4);
+	var chunk_size = file.get_32();
 	var childChunks = file.get_32()
 
-	match chunkId:
+	file.set_chunk_size(chunk_size);
+	match chunk_id:
 		'SIZE':
 			vox.current_index += 1;
 			var model = vox.get_model();
@@ -123,9 +166,7 @@ func read_chunk(vox: VoxNode, file: File):
 			var z = file.get_32();
 			var y = file.get_32();
 			model.size = Vector3(x, y, z);
-			print('SIZE: ', x, ', ', y, ', ', z)
-			#warning-ignore:return_value_discarded
-			file.get_buffer(chunkSize - 4 * 3)
+			print('SIZE ', model.size)
 		'XYZI':
 			var model = vox.get_model();
 			print('XYZI')
@@ -145,14 +186,42 @@ func read_chunk(vox: VoxNode, file: File):
 				var b = float(file.get_8() / 255.0)
 				var a = float(file.get_8() / 255.0)
 				vox.colors.append(Color(r, g, b, a))
+		'nTRN':
+			var nodeId = file.get_32();
+			var attributes = file.get_vox_dict();
+			var child = file.get_32();
+			file.get_buffer(8);
+			var num_of_frames = file.get_32();
+			print('nTRN[',nodeId,'] -> ', child, ': ', attributes);
+			for _frame in range(num_of_frames):
+				var frame_attributes = file.get_vox_dict();
+				print('\t', frame_attributes);
+		'nGRP':
+			var node_id = file.get_32();
+			var attributes = file.get_vox_dict();
+			var num_children = file.get_32();
+			var children = [];
+			for _c in num_children:
+				children.append(file.get_32());
+			print('nGRP[', node_id, '] -> ', children, ': ', attributes);
+		'nSHP':
+			var node_id = file.get_32();
+			var attributes = file.get_vox_dict();
+			var num_models = file.get_32();
+			var models = [];
+			for _i in range(num_models):
+				models.append(file.get_32());
+				file.get_vox_dict();
+			print('nSHP[', node_id, '] -> ', models, ': ', attributes);
 		'MAIN':
 			print('MAIN')
-			#warning-ignore:return_value_discarded
-			file.get_buffer(chunkSize)
+		'LAYR':
+			print('LAYR')
+		'MATL':
+			print('MATL')
 		_:
-			print(chunkId, ' - UNHANDLED');
-			#warning-ignore:return_value_discarded
-			file.get_buffer(chunkSize)
+			print(chunk_id, ' - UNHANDLED, ChunkSize: ', chunk_size, ', ChildChunks: ', childChunks);
+	file.read_remaining();
 
 var top = [
 	Vector3( 1.0000, 1.0000, 1.0000),
