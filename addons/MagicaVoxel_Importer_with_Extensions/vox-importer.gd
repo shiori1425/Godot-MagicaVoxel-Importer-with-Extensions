@@ -9,13 +9,13 @@ const VoxNode = preload("./VoxFormat/VoxNode.gd");
 const debug_file = false;
 
 func _init():
-	print('Vox Importer: ready')
+	print('MagicaVoxel Importer: Ready')
 
 func get_importer_name():
-	return 'Vox.Importer'
+	return 'MagicaVoxel.With.Extensions'
 
 func get_visible_name():
-	return 'Vox Importer'
+	return 'MagicaVoxel Mesh'
 
 func get_recognized_extensions():
 	return [ 'vox' ]
