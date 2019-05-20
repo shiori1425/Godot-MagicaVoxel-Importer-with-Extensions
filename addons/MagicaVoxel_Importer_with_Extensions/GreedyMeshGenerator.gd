@@ -206,8 +206,9 @@ func width_query(faces :Dictionary, face :Vector3, o :int) -> int:
 # the set of faces and orientation, with the given width
 func height_query(faces :Dictionary, face :Vector3, o :int, width :int) -> int:
 	var hd :int = height_axis[o]
+	var c :Color = faces[face]
 	var v :Vector3 = face
 	v[hd] += 1.0
-	while width_query(faces, v, o) >= width:
+	while faces.has(v) and faces[v] == c and width_query(faces, v, o) >= width:
 		v[hd] += 1.0
 	return int(v[hd] - face[hd])
