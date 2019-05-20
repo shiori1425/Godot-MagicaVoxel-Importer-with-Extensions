@@ -2,9 +2,10 @@ tool
 extends EditorImportPlugin
 
 const VoxFile = preload("./VoxFile.gd");
-const Faces = preload("./Faces.gd");
 const VoxData = preload("./VoxFormat/VoxData.gd");
 const VoxNode = preload("./VoxFormat/VoxNode.gd");
+const CulledMeshGenerator = preload("./CulledMeshGenerator.gd");
+const GreedyMeshGenerator = preload("./GreedyMeshGenerator.gd");
 
 const debug_file = false;
 const debug_models = false;
@@ -38,6 +39,10 @@ func get_import_options(_preset):
 		{
 			'name': 'Scale',
 			'default_value': 0.1
+		},
+		{
+			'name': 'GreedyMeshGenerator',
+			'default_value': false
 		}
 	]
 
@@ -48,6 +53,9 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var scale = 0.1
 	if options.Scale:
 		scale = float(options.Scale)
+	var greedy = false
+	if options.GreedyMeshGenerator:
+		greedy = bool(options.GreedyMeshGenerator)
 	
 	var file = File.new()
 	var err = file.open(source_path, File.READ)
@@ -68,34 +76,11 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	file.close()
 	
 	var voxel_data = unify_voxels(vox).data;
-
-	var st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-
-	var vox_to_godot = Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP);
-	for voxel in voxel_data:
-		var voxelSides = []
-		if not voxel_data.has(voxel + Vector3.UP): voxelSides += Faces.Top
-		if not voxel_data.has(voxel + Vector3.DOWN): voxelSides += Faces.Bottom
-		if not voxel_data.has(voxel + Vector3.LEFT): voxelSides += Faces.Left
-		if not voxel_data.has(voxel + Vector3.RIGHT): voxelSides += Faces.Right
-		if not voxel_data.has(voxel + Vector3.BACK): voxelSides += Faces.Front
-		if not voxel_data.has(voxel + Vector3.FORWARD): voxelSides += Faces.Back
-		
-		st.add_color(vox.colors[voxel_data[voxel]])
-
-		for t in voxelSides:
-			st.add_vertex(vox_to_godot.xform((t + voxel) * scale))
-		
-	st.generate_normals()
-	
-	var material = SpatialMaterial.new()
-	material.vertex_color_is_srgb = true
-	material.vertex_color_use_as_albedo = true
-	material.roughness = 1
-	st.set_material(material)
-
-	var mesh = st.commit()
+	var mesh
+	if greedy:
+		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale)
+	else:
+		mesh = CulledMeshGenerator.new().generate(vox, voxel_data, scale)
 	
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
