@@ -53,7 +53,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var scale = 0.1
 	if options.Scale:
 		scale = float(options.Scale)
-	var greedy = false
+	var greedy = true
 	if options.GreedyMeshGenerator:
 		greedy = bool(options.GreedyMeshGenerator)
 	
