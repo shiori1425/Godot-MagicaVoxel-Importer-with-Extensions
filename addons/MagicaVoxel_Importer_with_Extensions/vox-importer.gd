@@ -42,7 +42,7 @@ func get_import_options(_preset):
 		},
 		{
 			'name': 'GreedyMeshGenerator',
-			'default_value': false
+			'default_value': true
 		}
 	]
 
