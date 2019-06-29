@@ -178,9 +178,10 @@ func generate_geometry_for_face(faces :Dictionary, face :Vector3, o :int, scale 
 	grow[ha] *= height
 	
 	# Generate geometry
+	var yoffset = Vector3(0, -mins.z * scale, 0);
 	st.add_color(faces[face])
 	for vert in face_meshes[o]:
-		st.add_vertex(vox_to_godot.xform(((vert * grow) + face) * scale))
+		st.add_vertex(yoffset + vox_to_godot.xform(((vert * grow) + face) * scale))
 	
 	# Remove these faces from the pool
 	var v :Vector3 = Vector3()
