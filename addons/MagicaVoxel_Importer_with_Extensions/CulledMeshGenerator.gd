@@ -3,6 +3,7 @@ const vox_to_godot = Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP);
 
 func generate(vox, voxel_data, scale):
 	var generator = VoxelMeshGenerator.new(vox, voxel_data, scale);
+
 	return generator.generate_mesh();
 
 class MeshGenerator:
@@ -56,8 +57,23 @@ class VoxelMeshGenerator:
 		return adj_material.is_glass() && !local_material.is_glass();
 
 	func generate_mesh():
-		var vox_to_godot = Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP);
 
+		# Minimum extends of the volume
+		var mins :Vector3 = Vector3(1000000, 1000000, 1000000)
+		# Maximum extends of the volume
+		var maxs :Vector3 = Vector3(-1000000,-1000000,-1000000)	
+
+		# Find bounds
+		for v in voxel_data:
+			mins.x = min(mins.x, v.x)
+			mins.y = min(mins.y, v.y)
+			mins.z = min(mins.z, v.z)
+			maxs.x = max(maxs.x, v.x)
+			maxs.y = max(maxs.y, v.y)
+			maxs.z = max(maxs.z, v.z)	
+
+		var vox_to_godot = Basis(Vector3.RIGHT, Vector3.FORWARD, Vector3.UP);
+		var yoffset = Vector3(0, -mins.z * scale, 0);
 		var gen = MeshGenerator.new();
 
 		for voxel in voxel_data:
@@ -75,6 +91,6 @@ class VoxelMeshGenerator:
 			gen.ensure_surface_exists(surface_index, color, material);
 
 			for t in voxelSides:
-				gen.add_vertex(surface_index, vox_to_godot.xform((t + voxel) * scale));
+				gen.add_vertex(surface_index, yoffset + vox_to_godot.xform((t + voxel) * scale));
 
 		return gen.combine_surfaces();
