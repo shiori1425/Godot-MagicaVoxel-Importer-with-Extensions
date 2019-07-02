@@ -44,6 +44,10 @@ func get_import_options(_preset):
 		{
 			'name': 'GreedyMeshGenerator',
 			'default_value': true
+		},
+		{
+			'name': 'SnapToGround',
+			'default_value': false
 		}
 	]
 
@@ -57,6 +61,10 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var greedy = true
 	if options.has("GreedyMeshGenerator"):
 		greedy = bool(options.GreedyMeshGenerator)
+	var snaptoground = false
+	if options.has("SnapToGround"):
+		snaptoground = bool(options.SnapToGround)
+
 
 	var file = File.new()
 	var err = file.open(source_path, File.READ)
@@ -67,7 +75,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 
 	var identifier = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
 	var version = file.get_32()
-	print('Importing: ', source_path, ' (scale: ', scale, ', file version: ', version, ', greedy mesh: ', greedy, ')');
+	print('Importing: ', source_path, ' (scale: ', scale, ', file version: ', version, ', greedy mesh: ', greedy, ', snap to ground: ', snaptoground, ')');
 
 	var vox = VoxData.new();
 	if identifier == 'VOX ':
@@ -79,9 +87,9 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var voxel_data = unify_voxels(vox).data;
 	var mesh
 	if greedy:
-		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale)
+		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
 	else:
-		mesh = CulledMeshGenerator.new().generate(vox, voxel_data, scale)
+		mesh = CulledMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
 
 	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
 	return ResourceSaver.save(full_path, mesh)
