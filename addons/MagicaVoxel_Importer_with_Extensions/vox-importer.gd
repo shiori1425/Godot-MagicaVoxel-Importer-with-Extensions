@@ -85,7 +85,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 			read_chunk(vox, voxFile);
 	file.close()
 
-	var voxel_data = unify_voxels(vox).data;
+	var voxel_data = unify_voxels(vox);
 	var mesh
 	if greedy:
 		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
@@ -231,45 +231,74 @@ func read_chunk(vox: VoxData, file: VoxFile):
 
 func unify_voxels(vox: VoxData):
 	var node = vox.nodes[0];
-	return get_voxels(node, vox);
+	var layeredData = get_layeredVoxels(node, vox, -1)
+	return layeredData.getDataMergedFromAllLayers();
 
-class VoxelData:
-	var data = {};
+class layeredVoxelData:
+	var layeredData = {};
 
-	func combine(model):
+	func combine(layerId, model):
 		var offset = (model.size / 2.0).floor();
+		if not layerId in layeredData:
+			layeredData[layerId] = {}
 		for voxel in model.voxels:
-			data[voxel - offset] = model.voxels[voxel];
+			layeredData[layerId][voxel - offset] = model.voxels[voxel];
 
 	func combine_data(other):
-		for voxel in other.data:
-			data[voxel] = other.data[voxel];
+		for layerId in other.layeredData:
+			if not layerId in layeredData:
+				layeredData[layerId] = {}
+			for voxel in other.layeredData[layerId]:
+				layeredData[layerId][voxel] = other.layeredData[layerId][voxel];
 
 	func rotate(basis: Basis):
 		var new_data = {};
-		for voxel in data:
-			var half_step = Vector3(0.5, 0.5, 0.5);
-			var new_voxel = (basis.xform(voxel+half_step)-half_step).floor();
-			new_data[new_voxel] = data[voxel];
-		data = new_data;
+		for layerId in layeredData:
+			new_data[layerId] = {}
+			for voxel in layeredData[layerId]:
+				var half_step = Vector3(0.5, 0.5, 0.5);
+				var new_voxel = (basis.xform(voxel+half_step)-half_step).floor();
+				new_data[layerId][new_voxel] = layeredData[layerId][voxel];
+		layeredData = new_data;
 
 	func translate(translation: Vector3):
 		var new_data = {};
-		for voxel in data:
-			var new_voxel = voxel + translation;
-			new_data[new_voxel] = data[voxel];
-		data = new_data;
+		for layerId in layeredData:
+			new_data[layerId] = {}
+			for voxel in layeredData[layerId]:
+				var new_voxel = voxel + translation;
+				new_data[layerId][new_voxel] = layeredData[layerId][voxel];
+		layeredData = new_data;
 
-func get_voxels(node: VoxNode, vox: VoxData):
-	var data = VoxelData.new();
-	if node.layerId in vox.layers and !vox.layers[node.layerId].isVisible:
+	func getDataMergedFromAllLayers():
+		# The result of this function
+		var data = {};
+		# Get a sorted list of active layerIds
+		var layerIds=[];
+		for layerId in layeredData:
+			layerIds.append(layerId)
+		layerIds.sort()
+		# Merge all layer data in layerId order (highest layer overrides all)
+		for layerId in layerIds:
+			for voxel in layeredData[layerId]:
+				if voxel in data: print(voxel)
+				data[voxel] = layeredData[layerId][voxel];
+		# Return the merged data
 		return data;
+
+func get_layeredVoxels(node: VoxNode, vox: VoxData, layerId: int):
+	var data = layeredVoxelData.new();
+	if node.layerId in vox.layers:
+		if vox.layers[node.layerId].isVisible:
+			layerId = node.layerId;
+		else:
+			return data;
 	for model_index in node.models:
 		var model = vox.models[model_index];
-		data.combine(model);
+		data.combine(layerId, model);
 	for child_index in node.child_nodes:
 		var child = vox.nodes[child_index];
-		var child_data = get_voxels(child, vox);
+		var child_data = get_layeredVoxels(child, vox, layerId);
 		data.combine_data(child_data);
 	data.rotate(node.rotation.inverse());
 	data.translate(node.translation);
