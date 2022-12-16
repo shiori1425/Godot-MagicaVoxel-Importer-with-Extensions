@@ -8,6 +8,8 @@ var colors = null;
 var nodes = {};
 #warning-ignore:unused_class_variable
 var materials = {};
+#warning-ignore:unused_class_variable
+var layers = {};
 
 func get_model():
 	if (!models.has(current_index)):

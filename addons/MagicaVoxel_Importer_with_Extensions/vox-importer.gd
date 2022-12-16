@@ -5,6 +5,7 @@ const VoxFile = preload("./VoxFile.gd");
 const VoxData = preload("./VoxFormat/VoxData.gd");
 const VoxNode = preload("./VoxFormat/VoxNode.gd");
 const VoxMaterial = preload("./VoxFormat/VoxMaterial.gd");
+const VoxLayer = preload("./VoxFormat/VoxLayer.gd");
 const CulledMeshGenerator = preload("./CulledMeshGenerator.gd");
 const GreedyMeshGenerator = preload("./GreedyMeshGenerator.gd");
 
@@ -167,7 +168,8 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			var child = file.get_32();
 			node.child_nodes.append(child);
 
-			file.get_buffer(8);
+			file.get_32();
+			node.layerId = file.get_32();
 			var num_of_frames = file.get_32();
 
 			if debug_file:
@@ -215,6 +217,14 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			if debug_file:
 				print("MATL ", material_id);
 				print("\t", properties);
+		'LAYR':
+			var layer_id = file.get_32();
+			var attributes = file.get_vox_dict();
+			var isVisible = true;
+			if '_hidden' in attributes and attributes['_hidden'] == '1':
+				isVisible = false;
+			var layer = VoxLayer.new(layer_id, isVisible);
+			vox.layers[layer_id] = layer;
 		_:
 			if debug_file: print(chunk_id);
 	file.read_remaining();
@@ -252,6 +262,8 @@ class VoxelData:
 
 func get_voxels(node: VoxNode, vox: VoxData):
 	var data = VoxelData.new();
+	if node.layerId in vox.layers and !vox.layers[node.layerId].isVisible:
+		return data;
 	for model_index in node.models:
 		var model = vox.models[model_index];
 		data.combine(model);
