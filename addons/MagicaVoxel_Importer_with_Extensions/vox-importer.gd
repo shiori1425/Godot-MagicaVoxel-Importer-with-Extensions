@@ -49,6 +49,10 @@ func get_import_options(_preset):
 		{
 			'name': 'SnapToGround',
 			'default_value': false
+		},
+		{
+			'name': 'FirstKeyframeOnly',
+			'default_value': true
 		}
 	]
 
@@ -65,6 +69,9 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var snaptoground = false
 	if options.has("SnapToGround"):
 		snaptoground = bool(options.SnapToGround)
+	var firstKeyframeOnly = false
+	if options.has("FirstKeyframeOnly"):
+		firstKeyframeOnly = bool(options.FirstKeyframeOnly)
 
 
 	var file = File.new()
@@ -85,7 +92,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 			read_chunk(vox, voxFile);
 	file.close()
 
-	var voxel_data = unify_voxels(vox);
+	var voxel_data = unify_voxels(vox, firstKeyframeOnly);
 	var mesh
 	if greedy:
 		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
@@ -229,9 +236,9 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			if debug_file: print(chunk_id);
 	file.read_remaining();
 
-func unify_voxels(vox: VoxData):
+func unify_voxels(vox: VoxData, firstKeyframeOnly: bool):
 	var node = vox.nodes[0];
-	var layeredData = get_layeredVoxels(node, vox, -1)
+	var layeredData = get_layeredVoxels(node, vox, -1, firstKeyframeOnly)
 	return layeredData.getDataMergedFromAllLayers();
 
 class layeredVoxelData:
@@ -285,19 +292,25 @@ class layeredVoxelData:
 		# Return the merged data
 		return data;
 
-func get_layeredVoxels(node: VoxNode, vox: VoxData, layerId: int):
+func get_layeredVoxels(node: VoxNode, vox: VoxData, layerId: int, firstKeyframeOnly: bool):
 	var data = layeredVoxelData.new();
 	if node.layerId in vox.layers:
 		if vox.layers[node.layerId].isVisible:
 			layerId = node.layerId;
 		else:
 			return data;
-	for model_index in node.models:
-		var model = vox.models[model_index];
-		data.combine(layerId, model);
+	if firstKeyframeOnly:
+		if node.models.size() > 0:
+			var model_index = node.models[0];
+			var model = vox.models[model_index];
+			data.combine(layerId, model);
+	else:
+		for model_index in node.models:
+			var model = vox.models[model_index];
+			data.combine(layerId, model);
 	for child_index in node.child_nodes:
 		var child = vox.nodes[child_index];
-		var child_data = get_layeredVoxels(child, vox, layerId);
+		var child_data = get_layeredVoxels(child, vox, layerId, firstKeyframeOnly);
 		data.combine_data(child_data);
 	data.rotate(node.rotation.inverse());
 	data.translate(node.translation);
