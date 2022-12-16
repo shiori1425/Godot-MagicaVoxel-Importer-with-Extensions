@@ -281,7 +281,6 @@ class layeredVoxelData:
 		# Merge all layer data in layerId order (highest layer overrides all)
 		for layerId in layerIds:
 			for voxel in layeredData[layerId]:
-				if voxel in data: print(voxel)
 				data[voxel] = layeredData[layerId][voxel];
 		# Return the merged data
 		return data;
