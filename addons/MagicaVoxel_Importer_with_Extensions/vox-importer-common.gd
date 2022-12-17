@@ -1,5 +1,3 @@
-tool
-extends EditorImportPlugin
 
 const VoxFile = preload("./VoxFile.gd");
 const VoxData = preload("./VoxFormat/VoxData.gd");
@@ -12,52 +10,7 @@ const GreedyMeshGenerator = preload("./GreedyMeshGenerator.gd");
 const debug_file = false;
 const debug_models = false;
 
-func _init():
-	print('MagicaVoxel Importer: Ready')
-
-func get_importer_name():
-	return 'MagicaVoxel.With.Extensions'
-
-func get_visible_name():
-	return 'MagicaVoxel Mesh'
-
-func get_recognized_extensions():
-	return [ 'vox' ]
-
-func get_resource_type():
-	return 'Mesh'
-
-func get_save_extension():
-	return 'mesh'
-
-func get_preset_count():
-	return 0
-
-func get_preset_name(_preset):
-	return 'Default'
-
-func get_import_options(_preset):
-	return [
-		{
-			'name': 'Scale',
-			'default_value': 0.1
-		},
-		{
-			'name': 'GreedyMeshGenerator',
-			'default_value': true
-		},
-		{
-			'name': 'SnapToGround',
-			'default_value': false
-		},
-		{
-			'name': 'FirstKeyframeOnly',
-			'default_value': true
-		}
-	]
-
-func get_option_visibility(_option, _options):
-	return true
+var fileKeyframeIds = [];
 
 func import(source_path, destination_path, options, _platforms, _gen_files):
 	var scale = 0.1
@@ -69,9 +22,9 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 	var snaptoground = false
 	if options.has("SnapToGround"):
 		snaptoground = bool(options.SnapToGround)
-	var firstKeyframeOnly = false
+	var mergeKeyframes = false
 	if options.has("FirstKeyframeOnly"):
-		firstKeyframeOnly = bool(options.FirstKeyframeOnly)
+		mergeKeyframes = not bool(options.FirstKeyframeOnly)
 
 
 	var file = File.new()
@@ -92,16 +45,16 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 			read_chunk(vox, voxFile);
 	file.close()
 
-	var voxel_data = unify_voxels(vox, firstKeyframeOnly);
-	var mesh
-	if greedy:
-		mesh = GreedyMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
-	else:
-		mesh = CulledMeshGenerator.new().generate(vox, voxel_data, scale, snaptoground)
+	fileKeyframeIds.sort()
 
-	var full_path = "%s.%s" % [ destination_path, get_save_extension() ]
-	return ResourceSaver.save(full_path, mesh)
-
+	var voxel_data = unify_voxels(vox, mergeKeyframes);
+	var meshes = []
+	for keyframeVoxels in voxel_data:
+		if greedy:
+			meshes.append(GreedyMeshGenerator.new().generate(vox, voxel_data[keyframeVoxels], scale, snaptoground))
+		else:
+			meshes.append(CulledMeshGenerator.new().generate(vox, voxel_data[keyframeVoxels], scale, snaptoground))
+	return meshes
 
 func string_to_vector3(input: String) -> Vector3:
 	var data = input.split_floats(' ');
@@ -182,16 +135,25 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			if debug_file:
 				print('nTRN[', node_id, '] -> ', child);
 				if (!attributes.empty()): print('\t', attributes);
+			if num_of_frames > 0:
+				node.transforms = {};
 			for _frame in range(num_of_frames):
+				var keyframe = 0;
+				var newTransform = { "translation": Vector3(), "rotation": Basis() };
 				var frame_attributes = file.get_vox_dict();
+				if (frame_attributes.has('_f')):
+					keyframe = int(frame_attributes['_f']);
 				if (frame_attributes.has('_t')):
 					var trans = frame_attributes['_t'];
-					node.translation = string_to_vector3(trans);
-					if debug_file: print('\tT: ', node.translation);
+					newTransform.translation = string_to_vector3(trans);
+					if debug_file: print('\tT: ', newTransform.translation);
 				if (frame_attributes.has('_r')):
 					var rot = frame_attributes['_r'];
-					node.rotation = byte_to_basis(int(rot));
-					if debug_file: print('\tR: ', node.rotation);
+					newTransform.rotation = byte_to_basis(int(rot)).inverse();
+					if debug_file: print('\tR: ', newTransform.rotation);
+				node.transforms[keyframe] = newTransform;
+				if not fileKeyframeIds.has(keyframe):
+					fileKeyframeIds.append(keyframe);
 		'nGRP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
@@ -212,8 +174,14 @@ func read_chunk(vox: VoxData, file: VoxFile):
 
 			var num_models = file.get_32();
 			for _i in range(num_models):
-				node.models.append(file.get_32());
-				file.get_vox_dict();
+				var keyframe = 0;
+				var modelId = file.get_32();
+				var model_attributes = file.get_vox_dict();
+				if (model_attributes.has('_f')):
+					keyframe = int(model_attributes['_f']);
+				node.models[keyframe] = modelId;
+				if not fileKeyframeIds.has(keyframe):
+					fileKeyframeIds.append(keyframe);
 			if debug_file:
 				print('nSHP[', node_id,'] -> ', node.models);
 				if (!attributes.empty()): print('\t', attributes);
@@ -236,82 +204,107 @@ func read_chunk(vox: VoxData, file: VoxFile):
 			if debug_file: print(chunk_id);
 	file.read_remaining();
 
-func unify_voxels(vox: VoxData, firstKeyframeOnly: bool):
+func unify_voxels(vox: VoxData, mergeKeyframes: bool):
 	var node = vox.nodes[0];
-	var layeredData = get_layeredVoxels(node, vox, -1, firstKeyframeOnly)
-	return layeredData.getDataMergedFromAllLayers();
+	var layeredVoxelData = get_layeredVoxels(node, vox, -1, mergeKeyframes)
+	return layeredVoxelData.getDataMergedFromLayers();
 
-class layeredVoxelData:
-	var layeredData = {};
+class LayeredVoxelData:
+	var data_keyframed_layered = {};
 
-	func combine(layerId, model):
+	func combine(keyframeId, layerId, model):
+		# Make sure there's space
+		if not keyframeId in data_keyframed_layered:
+			data_keyframed_layered[keyframeId] = {}
+		if not layerId in data_keyframed_layered[keyframeId]:
+			data_keyframed_layered[keyframeId][layerId] = {}
+		# Add the model voxels to the data
 		var offset = (model.size / 2.0).floor();
-		if not layerId in layeredData:
-			layeredData[layerId] = {}
 		for voxel in model.voxels:
-			layeredData[layerId][voxel - offset] = model.voxels[voxel];
+			data_keyframed_layered[keyframeId][layerId][voxel - offset] = model.voxels[voxel];
 
 	func combine_data(other):
-		for layerId in other.layeredData:
-			if not layerId in layeredData:
-				layeredData[layerId] = {}
-			for voxel in other.layeredData[layerId]:
-				layeredData[layerId][voxel] = other.layeredData[layerId][voxel];
+		for keyframeId in other.data_keyframed_layered:
+			if not keyframeId in data_keyframed_layered:
+				data_keyframed_layered[keyframeId] = {}
+			for layerId in other.data_keyframed_layered[keyframeId]:
+				if not layerId in data_keyframed_layered[keyframeId]:
+					data_keyframed_layered[keyframeId][layerId] = {}
+				for voxel in other.data_keyframed_layered[keyframeId][layerId]:
+					data_keyframed_layered[keyframeId][layerId][voxel] = (
+						other.data_keyframed_layered[keyframeId][layerId][voxel]);
 
-	func rotate(basis: Basis):
+	func transform(transforms):
 		var new_data = {};
-		for layerId in layeredData:
-			new_data[layerId] = {}
-			for voxel in layeredData[layerId]:
-				var half_step = Vector3(0.5, 0.5, 0.5);
-				var new_voxel = (basis.xform(voxel+half_step)-half_step).floor();
-				new_data[layerId][new_voxel] = layeredData[layerId][voxel];
-		layeredData = new_data;
+		for keyframeId in data_keyframed_layered:
+			new_data[keyframeId] = {}
+			var transform = get_input_for_keyframe(keyframeId, transforms);
+			for layerId in data_keyframed_layered[keyframeId]:
+				new_data[keyframeId][layerId] = {}
+				for voxel in data_keyframed_layered[keyframeId][layerId]:
+					var half_step = Vector3(0.5, 0.5, 0.5);
+					var new_voxel = (
+						(transform.rotation.xform(voxel+half_step)-half_step).floor() +
+						transform.translation);
+					new_data[keyframeId][layerId][new_voxel] = (
+						data_keyframed_layered[keyframeId][layerId][voxel]);
+		data_keyframed_layered = new_data;
 
-	func translate(translation: Vector3):
-		var new_data = {};
-		for layerId in layeredData:
-			new_data[layerId] = {}
-			for voxel in layeredData[layerId]:
-				var new_voxel = voxel + translation;
-				new_data[layerId][new_voxel] = layeredData[layerId][voxel];
-		layeredData = new_data;
-
-	func getDataMergedFromAllLayers():
+	func getDataMergedFromLayers():
 		# The result of this function
-		var data = {};
-		# Get a sorted list of active layerIds
-		var layerIds=[];
-		for layerId in layeredData:
-			layerIds.append(layerId)
-		layerIds.sort()
-		# Merge all layer data in layerId order (highest layer overrides all)
-		for layerId in layerIds:
-			for voxel in layeredData[layerId]:
-				data[voxel] = layeredData[layerId][voxel];
+		var result = {};
+		for keyframeId in data_keyframed_layered:
+			result[keyframeId] = {}
+			# Merge all layer data in layerId order (highest layer overrides all)
+			var layerIds = data_keyframed_layered[keyframeId].keys();
+			layerIds.sort();
+			for layerId in layerIds:
+				for voxel in data_keyframed_layered[keyframeId][layerId]:
+					result[keyframeId][voxel] = data_keyframed_layered[keyframeId][layerId][voxel];
 		# Return the merged data
-		return data;
+		return result;
 
-func get_layeredVoxels(node: VoxNode, vox: VoxData, layerId: int, firstKeyframeOnly: bool):
-	var data = layeredVoxelData.new();
+	static func get_input_for_keyframe(focusKeyframeId, inputCollection):
+		var inputKeyframeIds = inputCollection.keys();
+		inputKeyframeIds.sort();
+		inputKeyframeIds.invert();
+		var result = inputKeyframeIds.back();
+		for inputKeyframeId in inputKeyframeIds:
+			if inputKeyframeId <= focusKeyframeId:
+				result = inputKeyframeId;
+				break;
+		return inputCollection[result];
+
+
+func get_layeredVoxels(node: VoxNode, vox: VoxData, layerId: int, mergeKeyframes: bool):
+	var result = LayeredVoxelData.new();
+
+	# Handle layers (keeping separated and ignoring hidden)
 	if node.layerId in vox.layers:
 		if vox.layers[node.layerId].isVisible:
 			layerId = node.layerId;
 		else:
-			return data;
-	if firstKeyframeOnly:
-		if node.models.size() > 0:
-			var model_index = node.models[0];
-			var model = vox.models[model_index];
-			data.combine(layerId, model);
-	else:
+			return result;
+
+	# Add all models in this node
+	if mergeKeyframes:
 		for model_index in node.models:
-			var model = vox.models[model_index];
-			data.combine(layerId, model);
+			var modelId = node.models[model_index];
+			var model = vox.models[modelId];
+			result.combine(0, layerId, model);
+	elif node.models.size() > 0:
+		for fileKeyframeId in fileKeyframeIds:
+			var frameModelId = LayeredVoxelData.get_input_for_keyframe(fileKeyframeId, node.models);
+			var model = vox.models[frameModelId];
+			result.combine(fileKeyframeId, layerId, model);
+
+	# Process child nodes
 	for child_index in node.child_nodes:
 		var child = vox.nodes[child_index];
-		var child_data = get_layeredVoxels(child, vox, layerId, firstKeyframeOnly);
-		data.combine_data(child_data);
-	data.rotate(node.rotation.inverse());
-	data.translate(node.translation);
-	return data;
+		var child_data = get_layeredVoxels(child, vox, layerId, mergeKeyframes);
+		result.combine_data(child_data);
+
+	# Run transforms
+	result.transform(node.transforms);
+
+	return result;
