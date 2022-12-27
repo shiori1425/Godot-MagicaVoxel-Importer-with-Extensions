@@ -73,6 +73,16 @@ const face_meshes :Array = [
 	Faces.Top,
 ]
 
+# An Array(Vector3) describing what normals to use by orientation
+const normals :Array = [
+	Vector3(0, 1, 0),
+	Vector3(0, -1, 0),
+	Vector3(-1, 0, 0),
+	Vector3(1, 0, 0),
+	Vector3(0, 0, 1),
+	Vector3(0, 0, -1),
+]
+
 # The SurfaceTool the object will use to generate the mesh
 var st :SurfaceTool = SurfaceTool.new()
 
@@ -87,8 +97,8 @@ var mins :Vector3 = Vector3(1000000, 1000000, 1000000)
 var maxs :Vector3 = Vector3(-1000000,-1000000,-1000000)
 
 # Generate a mesh for the given voxel_data with single-pass greedy face merging
-# Primary Reference: https://0fps.net/2012/06/30/meshing-in-a-minecraft-game/
-# Secondary Reference: https://www.gedge.ca/dev/2014/08/17/greedy-voxel-meshing
+# Primary RefCounted: https://0fps.net/2012/06/30/meshing-in-a-minecraft-game/
+# Secondary RefCounted: https://www.gedge.ca/dev/2014/08/17/greedy-voxel-meshing
 # voxel_data is a dict[Vector3]int
 func generate(vox :VoxData, voxel_data :Dictionary, scale :float, snaptoground : bool):
 	# Remeber, MagicaVoxel thinks Y is the depth axis. We convert to the correct
@@ -117,8 +127,7 @@ func generate(vox :VoxData, voxel_data :Dictionary, scale :float, snaptoground :
 		generate_geometry_for_orientation(voxel_data, o, scale, snaptoground)
 
 	# Finish the mesh and material and return
-	st.generate_normals()
-	var material = SpatialMaterial.new()
+	var material = StandardMaterial3D.new()
 	material.vertex_color_is_srgb = true
 	material.vertex_color_use_as_albedo = true
 	material.roughness = 1
@@ -181,9 +190,10 @@ func generate_geometry_for_face(faces :Dictionary, face :Vector3, o :int, scale 
 	var yoffset = Vector3(0,0,0);
 	if snaptoground : yoffset = Vector3(0, -mins.z * scale, 0);
 
-	st.add_color(faces[face])
+	st.set_color(faces[face])
+	st.set_normal(normals[o])
 	for vert in face_meshes[o]:
-		st.add_vertex(yoffset + vox_to_godot.xform(((vert * grow) + face) * scale))
+		st.add_vertex(yoffset + vox_to_godot * ((vert * grow) + face) * scale)
 	
 	# Remove these faces from the pool
 	var v :Vector3 = Vector3()

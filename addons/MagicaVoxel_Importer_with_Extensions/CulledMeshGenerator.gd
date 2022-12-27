@@ -14,7 +14,7 @@ class MeshGenerator:
 
 		var st = SurfaceTool.new();
 		st.begin(Mesh.PRIMITIVE_TRIANGLES);
-		st.add_color(color);
+		st.set_color(color);
 		st.set_material(material);
 		surfaces[surface_index] = st;
 
@@ -41,7 +41,7 @@ class VoxelMeshGenerator:
 	var scale:float;
 	var snaptoground:bool;
 
-	func _init(vox, voxel_data, scale, snaptoground):
+	func _init(vox,voxel_data,scale,snaptoground):
 		self.vox = vox;
 		self.voxel_data = voxel_data;
 		self.scale = scale;
@@ -94,6 +94,6 @@ class VoxelMeshGenerator:
 			gen.ensure_surface_exists(surface_index, color, material);
 
 			for t in voxelSides:
-				gen.add_vertex(surface_index, yoffset + vox_to_godot.xform((t + voxel) * scale));
+				gen.add_vertex(surface_index, yoffset + vox_to_godot * (t + voxel) * scale);
 
 		return gen.combine_surfaces();

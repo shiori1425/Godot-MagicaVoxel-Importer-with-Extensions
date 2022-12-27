@@ -27,14 +27,12 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		mergeKeyframes = not bool(options.FirstKeyframeOnly)
 
 
-	var file = File.new()
-	var err = file.open(source_path, File.READ)
+	var file = FileAccess.open(source_path, FileAccess.READ)
 
-	if err != OK:
-		if file.is_open(): file.close()
-		return err
+	if file == null:
+		return FileAccess.get_open_error()
 
-	var identifier = PoolByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
+	var identifier = PackedByteArray([ file.get_8(), file.get_8(), file.get_8(), file.get_8() ]).get_string_from_ascii()
 	var version = file.get_32()
 	print('Importing: ', source_path, ' (scale: ', scale, ', file version: ', version, ', greedy mesh: ', greedy, ', snap to ground: ', snaptoground, ')');
 
@@ -43,7 +41,7 @@ func import(source_path, destination_path, options, _platforms, _gen_files):
 		var voxFile = VoxFile.new(file);
 		while voxFile.has_data_to_read():
 			read_chunk(vox, voxFile);
-	file.close()
+	file = null
 
 	fileKeyframeIds.sort()
 
@@ -87,7 +85,6 @@ func byte_to_basis(data: int):
 func read_chunk(vox: VoxData, file: VoxFile):
 	var chunk_id = file.get_string(4);
 	var chunk_size = file.get_32();
-	#warning-ignore:unused_variable
 	var childChunks = file.get_32()
 
 	file.set_chunk_size(chunk_size);
@@ -134,19 +131,19 @@ func read_chunk(vox: VoxData, file: VoxFile):
 
 			if debug_file:
 				print('nTRN[', node_id, '] -> ', child);
-				if (!attributes.empty()): print('\t', attributes);
+				if (!attributes.is_empty()): print('\t', attributes);
 			if num_of_frames > 0:
 				node.transforms = {};
 			for _frame in range(num_of_frames):
 				var keyframe = 0;
-				var newTransform = { "translation": Vector3(), "rotation": Basis() };
+				var newTransform = { "position": Vector3(), "rotation": Basis() };
 				var frame_attributes = file.get_vox_dict();
 				if (frame_attributes.has('_f')):
 					keyframe = int(frame_attributes['_f']);
 				if (frame_attributes.has('_t')):
 					var trans = frame_attributes['_t'];
-					newTransform.translation = string_to_vector3(trans);
-					if debug_file: print('\tT: ', newTransform.translation);
+					newTransform.position = string_to_vector3(trans);
+					if debug_file: print('\tT: ', newTransform.position);
 				if (frame_attributes.has('_r')):
 					var rot = frame_attributes['_r'];
 					newTransform.rotation = byte_to_basis(int(rot)).inverse();
@@ -165,7 +162,7 @@ func read_chunk(vox: VoxData, file: VoxFile):
 				node.child_nodes.append(file.get_32());
 			if debug_file:
 				print('nGRP[', node_id, '] -> ', node.child_nodes);
-				if (!attributes.empty()): print('\t', attributes);
+				if (!attributes.is_empty()): print('\t', attributes);
 		'nSHP':
 			var node_id = file.get_32();
 			var attributes = file.get_vox_dict();
@@ -184,7 +181,7 @@ func read_chunk(vox: VoxData, file: VoxFile):
 					fileKeyframeIds.append(keyframe);
 			if debug_file:
 				print('nSHP[', node_id,'] -> ', node.models);
-				if (!attributes.empty()): print('\t', attributes);
+				if (!attributes.is_empty()): print('\t', attributes);
 		'MATL':
 			var material_id = file.get_32() - 1;
 			var properties = file.get_vox_dict();
@@ -244,8 +241,8 @@ class LayeredVoxelData:
 				for voxel in data_keyframed_layered[keyframeId][layerId]:
 					var half_step = Vector3(0.5, 0.5, 0.5);
 					var new_voxel = (
-						(transform.rotation.xform(voxel+half_step)-half_step).floor() +
-						transform.translation);
+						(transform.rotation * voxel+half_step-half_step).floor() +
+						transform.position);
 					new_data[keyframeId][layerId][new_voxel] = (
 						data_keyframed_layered[keyframeId][layerId][voxel]);
 		data_keyframed_layered = new_data;
@@ -267,7 +264,7 @@ class LayeredVoxelData:
 	static func get_input_for_keyframe(focusKeyframeId, inputCollection):
 		var inputKeyframeIds = inputCollection.keys();
 		inputKeyframeIds.sort();
-		inputKeyframeIds.invert();
+		inputKeyframeIds.reverse();
 		var result = inputKeyframeIds.back();
 		for inputKeyframeId in inputKeyframeIds:
 			if inputKeyframeId <= focusKeyframeId:

@@ -1,23 +1,29 @@
 var properties = null;
-var material: SpatialMaterial = null;
+var material: StandardMaterial3D = null;
 
-var type setget ,get_type;
-func get_type(): return properties["_type"];
+var type:
+	get:
+		return properties.get("_type", "diffuse");
 
-var weight setget ,get_weight;
-func get_weight(): return float(properties["_weight"]);
+var weight:
+	get:
+		return float(properties.get("_weight", 0));
 
-var specular setget ,get_specular;
-func get_specular(): return float(properties["_spec"]);
+var specular:
+	get:
+		return float(properties.get("spec"));
 
-var roughness setget ,get_roughness;
-func get_roughness(): return float(properties["_rough"]);
+var roughness:
+	get:
+		return float(properties.get("rough"));
 
-var flux setget ,get_flux;
-func get_flux(): return float(properties["_flux"]);
+var flux:
+	get:
+		return float(properties.get("flux"));
 
-var refraction setget ,get_refraction;
-func get_refraction(): return float(properties["_ior"]);
+var refraction:
+	get:
+		return float(properties.get("ior"));
 
 func _init(properties):
 	self.properties = properties;
@@ -28,7 +34,7 @@ func is_glass():
 func get_material(color: Color):
 	if (material != null): return material;
 	
-	material = SpatialMaterial.new();
+	material = StandardMaterial3D.new();
 	material.vertex_color_is_srgb = true;
 	material.vertex_color_use_as_albedo = true;
 	
