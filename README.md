@@ -1,3 +1,5 @@
+This is an addon for **Godot 4.0**.  A **Godot 3.5** version is available on the [master branch](https://github.com/jon-heard/Godot-MagicaVoxel-Importer-with-Extensions).
+
 A fork of CloneDeath's Godot plugin [MagicaVoxel importer with extensions](https://github.com/CloneDeath/MagicaVoxel-Importer-with-Extensions).
 
 This fork adds a number of features that are waiting to be pulled into CloneDeath's plugin.  If you wish to use these features _now_ then use _this_ plugin instead.
