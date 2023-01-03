@@ -18,3 +18,6 @@ func _exit_tree():
 	pluginToMesh = null
 	pluginToMeshLibrary = null
 	remove_custom_type("FramedMeshInstance")
+
+func _get_priority() -> float:
+	return 1.0
