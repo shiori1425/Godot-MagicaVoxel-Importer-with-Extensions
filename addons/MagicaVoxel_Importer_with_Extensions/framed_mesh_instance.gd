@@ -1,13 +1,11 @@
-tool
-extends MeshInstance
+@tool
+extends MeshInstance3D
 
+@export var frames: MeshLibrary = null : set = set_frames
 
-export(MeshLibrary) var frames = null setget set_frames
-export(int) var current_frame = 0 setget set_current_frame
-
+@export var current_frame: int = 0 : set = set_current_frame
 
 var mesh_count = 0;
-
 
 func set_frames(v):
 	frames = v;
@@ -18,7 +16,6 @@ func set_frames(v):
 	else:
 		mesh_count = v.get_item_list().size()
 		self.mesh = v.get_item_mesh(0)
-
 
 func set_current_frame(v):
 	if v >= 0 and v < mesh_count:
