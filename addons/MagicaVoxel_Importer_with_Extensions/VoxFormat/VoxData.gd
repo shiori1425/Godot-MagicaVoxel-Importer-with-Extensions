@@ -2,13 +2,9 @@ const Model = preload("./Model.gd");
 
 var models = {0: Model.new()};
 var current_index = -1;
-#warning-ignore:unused_class_variable
-var colors = null;
-#warning-ignore:unused_class_variable
+var colors: Array;
 var nodes = {};
-#warning-ignore:unused_class_variable
 var materials = {};
-#warning-ignore:unused_class_variable
 var layers = {};
 
 func get_model():

@@ -1,11 +1,11 @@
-var file: File;
+var file: FileAccess;
 var chunk_size = 0;
 
-func _init(file: File):
+func _init(file: FileAccess):
 	self.file = file;
 	self.chunk_size = 0;
 
-func has_data_to_read(): return file.get_position() < file.get_len()
+func has_data_to_read(): return file.get_position() < file.get_length()
 
 func set_chunk_size(size):
 	chunk_size = size;
