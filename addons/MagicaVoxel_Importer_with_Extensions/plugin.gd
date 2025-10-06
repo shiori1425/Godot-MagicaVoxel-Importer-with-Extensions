@@ -1,4 +1,4 @@
-tool
+@tool
 extends EditorPlugin
 
 var pluginToMesh
@@ -9,7 +9,8 @@ func _enter_tree():
 	pluginToMeshLibrary = preload('vox-importer-meshLibrary.gd').new()
 	add_import_plugin(pluginToMesh)
 	add_import_plugin(pluginToMeshLibrary)
-	add_custom_type("FramedMeshInstance", "MeshInstance", preload("framed_mesh_instance.gd"), preload("framed_mesh_instance.png"))
+	add_custom_type("FramedMeshInstance", "MeshInstance3D",
+			preload("framed_mesh_instance.gd"), preload("framed_mesh_instance.png"))
 
 func _exit_tree():
 	remove_import_plugin(pluginToMesh)
@@ -17,3 +18,6 @@ func _exit_tree():
 	pluginToMesh = null
 	pluginToMeshLibrary = null
 	remove_custom_type("FramedMeshInstance")
+
+func _get_priority() -> float:
+	return 1.0
